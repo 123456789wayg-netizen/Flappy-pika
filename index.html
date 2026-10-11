@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>爆炸頭皮卡丘的華麗大冒險 (Afro Pikachu Flappy Bird)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            color: #fff;
+        }
+        #game-container {
+            position: relative;
+            width: 480px;
+            height: 640px;
+            box-shadow: 0 0 30px rgba(255, 223, 0, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #1a0033, #000022);
+        }
+        canvas {
+            display: block;
+            background: transparent;
+        }
+        /* 浮動式 UI 樣式 */
+        .ui-element {
+            position: absolute;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            z-index: 10;
+        }
+        #hud {
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 18px;
+            pointer-events: none;
+        }
+        #score-display {
+            color: #ffdf00;
+            font-size: 24px;
+        }
+        #hp-container {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .heart {
+            width: 20px;
+            height: 20px;
+            background: #ff3366;
+            position: relative;
+            transform: rotate(-45deg);
+            display: inline-block;
+            filter: drop-shadow(0 0 5px #ff3366);
+            transition: transform 0.3s ease;
+        }
+        .heart::before, .heart::after {
+            content: '';
+            width: 20px;
+            height: 20px;
+            background: #ff3366;
+            border-radius: 50%;
+            position: absolute;
+        }
+        .heart::before { top: -10px; left: 0; }
+        .heart::after { left: -10px; top: 0; }
+        .heart.lost {
+            background: #444 !important;
+            filter: none;
+        }
+        .heart.lost::before, .heart.lost::after {
+            background: #444 !important;
+        }
+        #active-buffs {
+            position: absolute;
+            top: 55px;
+            left: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 14px;
+            pointer-events: none;
+        }
+        .buff-badge {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 4px 8px;
+            border-radius: 12px;
+            border: 1px solid #fff;
+            animation: pulse 1s infinite alternate;
+        }
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
+        }
+        /* 面板選單樣式 */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            transition: opacity 0.3s ease;
+            text-align: center;
+            padding: 20px;
+        }
+        .hidden {
+            display: none !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+        h1 {
+            color: #ffdf00;
+            font-size: 32px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 15px #ffdf00;
+            animation: titleGlow 2s infinite ease-in-out;
+        }
+        @keyframes titleGlow {
+            0%, 100% { text-shadow: 0 0 10px #ffdf00; }
+            50% { text-shadow: 0 0 25px #ffdf00, 0 0 40px #ff6600; }
+        }
+        p {
+            font-size: 16px;
+            color: #ddd;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        .btn {
+            background: linear-gradient(135deg, #ffdf00, #ff6600);
+            color: #000;
+            border: none;
+            padding: 12px 35px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(255, 102, 0, 0.4);
+            transition: all 0.2s ease;
+        }
+        .btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 8px 25px rgba(255, 223, 0, 0.6);
+        }
+        .btn:active {
+            transform: translateY(1px);
+        }
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 360px;
+        }
+        .instructions ul {
+            margin: 5px 0 0 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- 遊戲核心畫面 -->
+    <canvas id="gameCanvas" width="480" height="640"></canvas>
+
+    <!-- 抬頭顯示器 (HUD) -->
+    <div id="hud" class="ui-element">
+        <div id="score-display">分數: <span id="score-val">0</span></div>
+        <div id="hp-container"></div>
+    </div>
+    
+    <!-- 主動狀態效果顯示 -->
+    <div id="active-buffs" class="ui-element"></div>
+
+    <!-- 開始畫面 -->
+    <div id="start-screen" class="overlay">
+        <h1>爆炸頭皮卡丘<br>華麗大冒險</h1>
+        <p>閃耀的爆炸頭！帶領皮卡丘衝破霓虹管道！</p>
+        <div class="instructions">
+            <strong>遊戲玩法：</strong>
+            <ul>
+                <li>點擊畫面或按【空白鍵】讓皮卡丘向上飛行。</li>
+                <li>避開迎面而來的雷電霓虹管道。</li>
+                <li><strong>道具說明：</strong>
+                    <br>❤️ 閃耀愛心：回復 1 點生命值
+                    <br>🛡️ 電磁護盾：5秒內免疫一次碰撞傷害
+                    <br>⚡ 星閃衝刺：狂暴無敵前進並吸取周圍道具
+                </li>
+            </ul>
+        </div>
+        <button class="btn" id="start-btn">開始冒險</button>
+    </div>
+
+    <!-- 結束畫面 -->
+    <div id="gameover-screen" class="overlay hidden">
+        <h1>冒險結束!</h1>
+        <p>最終得分: <span id="final-score" style="color:#ffdf00; font-size:24px;">0</span></p>
+        <button class="btn" id="restart-btn">重新挑戰</button>
+    </div>
+</div>
+
+<script>
+/**
+ * ==========================================
+ * 爆炸頭皮卡丘 Flappy Bird 遊戲核心程式碼
+ * 採用純原生 Web Audio API 與 Canvas 技術開發
+ * ==========================================
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- 遊戲組態設定 ---
+const CONFIG = {
+    gravity: 0.25,          // 重力加速度
+    jumpForce: -5.5,        // 跳躍向上推力
+    maxFallSpeed: 10,       // 最大下墜速度
+    pipeSpeed: 2.5,         // 管道移動速度
+    pipeSpawnRate: 100,     // 管道生成頻率（幀數計數）
+    pipeGap: 160,           // 上下管道空隙大小
+    maxHp: 3                // 初始/最大生命值
+};
+
+// --- 遊戲狀態變數 ---
+let gameState = 'START'; // START, PLAYING, GAMEOVER
+let score = 0;
+let hp = CONFIG.maxHp;
+let frameCount = 0;
+let pikachu = null;
+let pipes = [];
+let particles = [];
+let items = [];
+
+// --- 音效與音樂合成系統 (Web Audio API) ---
+// 不需要依賴外部音樂檔案，全靠寫程式碼合成音訊，防阻因跨域而失效的問題
+class SoundSystem {
+    constructor() {
+        this.ctx = null;
+        this.bgmInterval = null;
+    }
+
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    // 發出通用音訊的方法
+    playTone(freq, type, duration, vol, slideTo = null) {
+        if (!this.ctx) return;
+        try {
+            let osc = this.ctx.createOscillator();
+            let gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            
+            if (slideTo) {
+                osc.frequency.exponentialRampToValueAtTime(slideTo, this.ctx.currentTime + duration);
+            }
+            
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        } catch (e) { console.log(e); }
+    }
+
+    playJump() { this.playTone(400, 'triangle', 0.15, 0.15, 700); }
+    playHit() { this.playTone(180, 'sawtooth', 0.3, 0.3, 40); }
+    playScore() { this.playTone(587.33, 'sine', 0.1, 0.15, 880); } // D5 -> A5 輕快音
+    playItem() { this.playTone(659.25, 'sine', 0.2, 0.2, 1318.5); } // E5 -> E6 閃亮音
+    playShieldBreak() { this.playTone(300, 'square', 0.4, 0.2, 100); }
+
+    startBGM() {
+        this.init();
+        if (this.bgmInterval) clearInterval(this.bgmInterval);
+        
+        // 簡單、輕快的復古電玩風循環底音
+        const notes = [261.63, 329.63, 392.00, 329.63, 293.66, 349.23, 440.00, 349.23];
+        let idx = 0;
+        
+        this.bgmInterval = setInterval(() => {
+            if (gameState === 'PLAYING') {
+                // 每拍播放一個溫和的三角波音符
+                this.playTone(notes[idx], 'triangle', 0.25, 0.04);
+                idx = (idx + 1) % notes.length;
+            }
+        }, 300);
+    }
+
+    stopBGM() {
+        if (this.bgmInterval) {
+            clearInterval(this.bgmInterval);
+            this.bgmInterval = null;
+        }
+    }
+}
+const audio = new SoundSystem();
+
+
+// --- 核心類別定義 ---
+
+// 1. 主角：爆炸頭皮卡丘
+class Pikachu {
+    constructor() {
+        this.x = 100;
+        this.y = 250;
+        this.radius = 20;
+        this.velocity = 0;
+        this.targetAngle = 0;
+        this.angle = 0;
+        
+        // 狀態計時器 (Buffs)
+        this.shieldDuration = 0; // 電磁護盾剩餘幀數
+        this.rushDuration = 0;   // 星閃衝刺剩餘幀數
+        this.invulnerable = 0;   // 受傷後的無敵眨眼時間
+    }
+
+    update() {
+        // 星閃衝刺時速度為0不墜落，平時受重力影響
+        if (this.rushDuration > 0) {
+            this.velocity = 0;
+            this.rushDuration--;
+            // 衝刺時自動微調至畫面中段
+            this.y += (300 - this.y) * 0.1;
+        } else {
+            this.velocity += CONFIG.gravity;
+            if (this.velocity > CONFIG.maxFallSpeed) this.velocity = CONFIG.maxFallSpeed;
+            this.y += this.velocity;
+        }
+
+        if (this.shieldDuration > 0) this.shieldDuration--;
+        if (this.invulnerable > 0) this.invulnerable--;
+
+        // 計算旋轉角度 (根據下墜或上升速度)
+        if (this.rushDuration > 0) {
+            this.targetAngle = 0.1 * Math.sin(frameCount * 0.5); // 衝刺時呈現前衝震顫
+        } else {
+            this.targetAngle = Math.min(Math.max(this.velocity * 0.05, -0.4), 0.7);
+        }
+        this.angle += (this.targetAngle - this.angle) * 0.2; // 順滑過渡角度
+
+        // 撞擊天地界限限制
+        if (this.y - this.radius < 0) {
+            this.y = this.radius;
+            this.velocity = 0;
+        }
+        if (this.y + this.radius > canvas.height) {
+            this.y = canvas.height - this.radius;
+            this.takeDamage();
+        }
+
+        // 視覺華麗特效：皮卡丘背後釋放粒子尾跡
+        if (frameCount % 2 === 0) {
+            let pColor = '#ffdf00'; // 經典黃電光
+            if (this.rushDuration > 0) pColor = '#00ffff'; // 衝刺呈青藍星閃
+            else if (this.shieldDuration > 0) pColor = '#bf00ff'; // 護盾呈魅惑紫
+            
+            particles.push(new Particle(
+                this.x - 10, 
+                this.y + (Math.random() * 16 - 8), 
+                pColor, 
+                Math.random() * 3 + 2, 
+                -CONFIG.pipeSpeed * (this.rushDuration > 0 ? 2 : 1), 
+                (Math.random() - 0.5) * 2
+            ));
+        }
+    }
+
+    jump() {
+        if (gameState !== 'PLAYING' || this.rushDuration > 0) return;
+        this.velocity = CONFIG.jumpForce;
+        audio.playJump();
+        
+        // 跳躍時釋放閃電衝擊小碎屑
+        for(let i=0; i<5; i++) {
+            particles.push(new Particle(this.x, this.y + 10, '#ffffff', Math.random()*2+1, (Math.random()-0.5)*4, Math.random()*2+1));
+        }
+    }
+
+    takeDamage() {
+        if (this.rushDuration > 0 || this.invulnerable > 0) return; // 無敵中
+
+        if (this.shieldDuration > 0) {
+            // 護盾吸收傷害
+            this.shieldDuration = 0;
+            this.invulnerable = 45; // 給予短暫防護眨眼
+            audio.playShieldBreak();
+            createExplosion(this.x, this.y, '#bf00ff', 30);
+            return;
+        }
+
+        // 扣除生命
+        hp--;
+        audio.playHit();
+        createExplosion(this.x, this.y, '#ff3333', 40);
+        this.invulnerable = 60; // 1秒無敵時間
+        this.velocity = CONFIG.jumpForce * 0.7; // 受擊後小彈跳
+        updateHpUI();
+
+        if (hp <= 0) {
+            endGame();
+        }
+    }
+
+    draw() {
+        // 受傷無敵時產生眨眼隱形效果
+        if (this.invulnerable > 0 && Math.floor(this.invulnerable / 4) % 2 === 0) return;
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+
+        // 繪製特殊狀態光環背景
+        if (this.rushDuration > 0) {
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius * 1.8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.25)';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#00ffff';
+            ctx.fill();
+        } else if (this.shieldDuration > 0) {
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius * 1.6, 0, Math.PI * 2);
+            ctx.strokeStyle = '#bf00ff';
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#bf00ff';
+            ctx.stroke();
+        }
+
+        // 繪製皮卡丘身體核心 (鮮黃色圓)
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffdf00';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ffdf00';
+        ctx.fill();
+        ctx.shadowBlur = 0; // 重置陰影
+
+        // 畫經典紅臉頰
+        ctx.beginPath();
+        ctx.arc(10, 5, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff3333';
+        ctx.fill();
+
+        // 畫水靈的大眼睛
+        ctx.beginPath();
+        ctx.arc(12, -5, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#222';
+        ctx.fill();
+        ctx.beginPath(); // 眼中高光
+        ctx.arc(13.5, -6.5, 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+
+        // 畫耳朵 (尖尖小耳)
+        ctx.fillStyle = '#ffdf00';
+        ctx.beginPath();
+        ctx.moveTo(-5, -18);
+        ctx.lineTo(-12, -32);
+        ctx.lineTo(-15, -15);
+        ctx.fill();
+        ctx.fillStyle = '#000'; // 耳尖黑色
+        ctx.beginPath();
+        ctx.moveTo(-9.5, -27.1);
+        ctx.lineTo(-12, -32);
+        ctx.lineTo(-11, -23.5);
+        ctx.fill();
+
+        // 【核心亮點】巨大的華麗黑人爆炸頭 (Afro Hair)
+        ctx.fillStyle = '#3a2212';
+        const afroCircles = [
+            {dx: -12, dy: -12, r: 13},
+            {dx: -22, dy: -2, r: 12},
+            {dx: -16, dy: 10, r: 11},
+            {dx: -5, dy: -24, r: 12},
+            {dx: -24, dy: -12, r: 10},
+        ];
+        afroCircles.forEach(c => {
+            ctx.beginPath();
+            ctx.arc(c.dx, c.dy, c.r, 0, Math.PI * 2);
+            ctx.fill();
+            // 給爆炸頭加點閃亮金粉質感
+            if (frameCount % 10 === 0) {
+                ctx.fillStyle = '#ffdf00';
+                ctx.fillRect(c.dx + Math.random()*10-5, c.dy + Math.random()*10-5, 2, 2);
+                ctx.fillStyle = '#3a2212';
+            }
+        });
+
+        ctx.restore();
+    }
+}
+
+// 2. 雷電霓虹障礙管道
+class Pipe {
+    constructor() {
+        this.x = canvas.width;
+        this.topHeight = Math.random() * (canvas.height - CONFIG.pipeGap - 160) + 60;
+        this.bottomY = this.topHeight + CONFIG.pipeGap;
+        this.width = 75;
+        this.passed = false;
+        
+        // 賦予霓虹色相，創造科技霓虹感
+        this.hue = (frameCount * 0.5) % 360;
+    }
+
+    update() {
+        // 衝刺時管道以雙倍速向後退，營造極速感
+        let speed = CONFIG.pipeSpeed;
+        if (pikachu && pikachu.rushDuration > 0) speed *= 2.2;
+        this.x -= speed;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = `hsla(${this.hue}, 100%, 50%, 0.8)`;
+        ctx.strokeStyle = `hsla(${this.hue}, 100%, 60%, 1)`;
+        ctx.lineWidth = 4;
+        ctx.fillStyle = 'rgba(10, 5, 20, 0.85)'; // 管道主體半透明黑底
+
+        // 1. 上管道
+        ctx.beginPath();
+        ctx.rect(this.x, 0, this.width, this.topHeight);
+        ctx.fill();
+        ctx.stroke();
+
+        // 上管道邊緣凸出部
+        ctx.beginPath();
+        ctx.rect(this.x - 4, this.topHeight - 24, this.width + 8, 24);
+        ctx.fill();
+        ctx.stroke();
+
+        // 2. 下管道
+        ctx.beginPath();
+        ctx.rect(this.x, this.bottomY, this.width, canvas.height - this.bottomY);
+        ctx.fill();
+        ctx.stroke();
+
+        // 下管道邊緣凸出部
+        ctx.beginPath();
+        ctx.rect(this.x - 4, this.bottomY, this.width + 8, 24);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    // 碰撞偵測（圓形與矩形交集判定）
+    collidesWith(bird) {
+        if (bird.rushDuration > 0) return false; // 衝刺中完全無敵，不發生碰撞
+
+        // 檢查上管道
+        let closestX1 = Math.max(this.x, Math.min(bird.x, this.x + this.width));
+        let closestY1 = Math.max(0, Math.min(bird.y, this.topHeight));
+        let dist1 = Math.hypot(bird.x - closestX1, bird.y - closestY1);
+
+        // 檢查下管道
+        let closestX2 = Math.max(this.x, Math.min(bird.x, this.x + this.width));
+        let closestY2 = Math.max(this.bottomY, Math.min(bird.y, canvas.height));
+        let dist2 = Math.hypot(bird.x - closestX2, bird.y - closestY2);
+
+        return (dist1 < bird.radius - 2) || (dist2 < bird.radius - 2);
+    }
+}
+
+// 3. 隨機掉落豐富道具系統
+class Item {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 14;
+        
+        // 隨機抽取道具種類：HEART (生命), SHIELD (護盾), RUSH (星閃無敵)
+        const types = ['HEART', 'SHIELD', 'RUSH'];
+        const weights = [0.5, 0.35, 0.15]; // 出現機率權重
+        let r = Math.random();
+        
+        if (r < weights[0]) this.type = 'HEART';
+        else if (r < weights[0] + weights[1]) this.type = 'SHIELD';
+        else this.type = 'RUSH';
+
+        this.pulseAngle = 0;
+    }
+
+    update() {
+        let speed = CONFIG.pipeSpeed;
+        if (pikachu && pikachu.rushDuration > 0) {
+            // 星閃衝刺時，道具具有磁鐵吸附效果，主動朝皮卡丘飛去
+            let dx = pikachu.x - this.x;
+            let dy = pikachu.y - this.y;
+            let dist = Math.hypot(dx, dy);
+            this.x += (dx / dist) * 8;
+            this.y += (dy / dist) * 8;
+        } else {
+            this.x -= speed;
+        }
+        this.pulseAngle += 0.1;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        // 營造縮放呼吸燈特效
+        let scale = 1 + Math.sin(this.pulseAngle) * 0.12;
+        ctx.scale(scale, scale);
+
+        ctx.shadowBlur = 12;
+
+        if (this.type === 'HEART') {
+            ctx.shadowColor = '#ff3366';
+            ctx.fillStyle = '#ff3366';
+            // 簡化畫愛心
+            ctx.beginPath();
+            ctx.arc(-5, -3, 6, 0, Math.PI * 2);
+            ctx.arc(5, -3, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(-11, -1);
+            ctx.lineTo(0, 11);
+            ctx.lineTo(11, -1);
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.type === 'SHIELD') {
+            ctx.shadowColor = '#bf00ff';
+            ctx.strokeStyle = '#bf00ff';
+            ctx.lineWidth = 3;
+            ctx.fillStyle = 'rgba(191, 0, 255, 0.4)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI*2);
+            ctx.fill();
+            ctx.stroke();
+            // 內圈閃電核心
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(-2, -5); ctx.lineTo(3, -1); ctx.lineTo(0, 1); ctx.lineTo(4, 6); ctx.lineTo(-1, 2); ctx.lineTo(1, 0);
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.type === 'RUSH') {
+            ctx.shadowColor = '#00ffff';
+            ctx.fillStyle = '#00ffff';
+            // 繪製閃亮小星星
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                ctx.lineTo(Math.cos((18 + i * 72) * Math.PI / 180) * 12, Math.sin((18 + i * 72) * Math.PI / 180) * 12);
+                ctx.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * 5, Math.sin((54 + i * 72) * Math.PI / 180) * 5);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    isCollectedBy(bird) {
+        let dist = Math.hypot(this.x - bird.x, this.y - bird.y);
+        return dist < (this.radius + bird.radius);
+    }
+}
+
+// 4. 絢麗視覺特效煙火粒子類別
+class Particle {
+    constructor(x, y, color, radius, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.radius = radius;
+        this.vx = vx;
+        this.vy = vy;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.02 + 0.015; // 消失速度
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= this.decay;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+// 實用輔助：製造爆炸粒子堆疊效果
+function createExplosion(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 5 + 2;
+        particles.push(new Particle(
+            x, y, color, 
+            Math.random() * 4 + 1, 
+            Math.cos(angle) * speed, 
+            Math.sin(angle) * speed
+        ));
+    }
+}
+
+
+// --- 遊戲邏輯控制流程 ---
+
+function initGame() {
+    pikachu = new Pikachu();
+    pipes = [];
+    particles = [];
+    items = [];
+    score = 0;
+    hp = CONFIG.maxHp;
+    frameCount = 0;
+    
+    document.getElementById('score-val').innerText = score;
+    updateHpUI();
+    updateBuffUI();
+}
+
+function startGame() {
+    audio.init();
+    gameState = 'PLAYING';
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('gameover-screen').classList.add('hidden');
+    initGame();
+    audio.startBGM();
+}
+
+function endGame() {
+    gameState = 'GAMEOVER';
+    audio.stopBGM();
+    document.getElementById('final-score').innerText = score;
+    document.getElementById('gameover-screen').classList.remove('hidden');
+}
+
+// 動態繪製與更新生命值愛心
+function updateHpUI() {
+    const container = document.getElementById('hp-container');
+    container.innerHTML = '';
+    for (let i = 0; i < CONFIG.maxHp; i++) {
+        let heart = document.createElement('div');
+        heart.className = 'heart' + (i >= hp ? ' lost' : '');
+        container.appendChild(heart);
+    }
+}
+
+// 更新主動 Buff 浮動徽章
+function updateBuffUI() {
+    const container = document.getElementById('active-buffs');
+    container.innerHTML = '';
+    
+    if (pikachu) {
+        if (pikachu.rushDuration > 0) {
+            let badge = document.createElement('div');
+            badge.className = 'buff-badge';
+            badge.style.color = '#00ffff';
+            badge.style.borderColor = '#00ffff';
+            badge.innerText = `⚡ 星閃衝刺: ${Math.ceil(pikachu.rushDuration/60)}s`;
+            container.appendChild(badge);
+        }
+        if (pikachu.shieldDuration > 0) {
+            let badge = document.createElement('div');
+            badge.className = 'buff-badge';
+            badge.style.color = '#bf00ff';
+            badge.style.borderColor = '#bf00ff';
+            badge.innerText = `🛡️ 電磁護盾中`;
+            container.appendChild(badge);
+        }
+    }
+}
+
+// 主渲染與演進迴圈 (1秒跑60次)
+function gameLoop() {
+    // 渲染背景星夜漸變
+    let bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    bgGrad.addColorStop(0, '#0a0015');
+    bgGrad.addColorStop(0.5, '#120024');
+    bgGrad.addColorStop(1, '#00000d');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 繪製幾何科技背景裝飾網格
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+    ctx.lineWidth = 1;
+    let gridSize = 40;
+    // 背景網格隨管道速度緩緩移動，產生偽3D視差流動感
+    let offset = (frameCount * (pikachu && pikachu.rushDuration > 0 ? CONFIG.pipeSpeed * 2.2 : CONFIG.pipeSpeed) * 0.5) % gridSize;
+    for (let x = -offset; x < canvas.width; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+
+    if (gameState === 'PLAYING') {
+        frameCount++;
+
+        // 定期產生新管道
+        if (frameCount % CONFIG.pipeSpawnRate === 0) {
+            pipes.push(new Pipe());
+        }
+
+        // 定期在天地間任意生成漂浮道具 (350幀約6秒一個)
+        if (frameCount % 350 === 0) {
+            items.push(new Item(canvas.width + 50, Math.random() * (canvas.height - 180) + 90));
+        }
+
+        pikachu.update();
+    }
+
+    // 管道邏輯加工與渲染
+    for (let i = pipes.length - 1; i >= 0; i--) {
+        if (gameState === 'PLAYING') pipes[i].update();
+        pipes[i].draw();
+
+        // 計分檢測
+        if (!pipes[i].passed && pipes[i].x + pipes[i].width < pikachu.x) {
+            pipes[i].passed = true;
+            score++;
+            document.getElementById('score-val').innerText = score;
+            audio.playScore();
+            // 得分時管道上方迸發絢爛星光
+            createExplosion(pipes[i].x + pipes[i].width/2, pipes[i].topHeight + CONFIG.pipeGap/2, '#ffdf00', 10);
+        }
+
+        // 碰撞檢查
+        if (pipes[i].collidesWith(pikachu)) {
+            pikachu.takeDamage();
+        }
+
+        // 移除超出視窗邊緣的管道
+        if (pipes[i].x + pipes[i].width < 0) {
+            pipes.splice(i, 1);
+        }
+    }
+
+    // 道具邏輯更新與碰撞判定
+    for (let i = items.length - 1; i >= 0; i--) {
+        if (gameState === 'PLAYING') items[i].update();
+        items[i].draw();
+
+        if (items[i].isCollectedBy(pikachu)) {
+            audio.playItem();
+            // 依拾取道具類別發動對應特殊效果
+            if (items[i].type === 'HEART') {
+                if (hp < CONFIG.maxHp) { hp++; updateHpUI(); }
+                createExplosion(items[i].x, items[i].y, '#ff3366', 20);
+            } else if (items[i].type === 'SHIELD') {
+                pikachu.shieldDuration = 600; // 提供長效護盾保障
+                createExplosion(items[i].x, items[i].y, '#bf00ff', 25);
+            } else if (items[i].type === 'RUSH') {
+                pikachu.rushDuration = 180;  // 3秒瘋狂星閃衝刺
+                createExplosion(items[i].x, items[i].y, '#00ffff', 40);
+            }
+            items.splice(i, 1);
+            continue;
+        }
+
+        if (items[i].x + 30 < 0) {
+            items.splice(i, 1);
+        }
+    }
+
+    // 粒子系統刷新與回收機制
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].draw();
+        if (particles[i].alpha <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+
+    // 最後繪製上層主角皮卡丘
+    if (pikachu) {
+        pikachu.draw();
+    }
+
+    // 每一幀動態更新一次 Buff 指示器狀態
+    if (gameState === 'PLAYING' && frameCount % 5 === 0) {
+        updateBuffUI();
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+
+// --- 監聽事件綁定（觸發控制） ---
+
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        e.preventDefault(); // 防止按空白鍵時網頁向下滾動
+        if (gameState === 'PLAYING') pikachu.jump();
+        else if (gameState === 'START') startGame();
+        else if (gameState === 'GAMEOVER') startGame();
+    }
+});
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault(); // 防阻移動端點擊連帶縮放
+    if (gameState === 'PLAYING') pikachu.jump();
+});
+
+canvas.addEventListener('mousedown', (e) => {
+    if (gameState === 'PLAYING') pikachu.jump();
+});
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+
+// 啟動動畫引擎
+requestAnimationFrame(gameLoop);
+
+</script>
+</body>
+</html>
